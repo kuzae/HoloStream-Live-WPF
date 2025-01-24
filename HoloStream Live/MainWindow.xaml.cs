@@ -1,4 +1,5 @@
 ﻿using HoloStream_Live.Services;
+using Microsoft.Web.WebView2.Core;
 using System.ComponentModel;
 using System.IO;
 using System.Text;
@@ -95,14 +96,74 @@ namespace HoloStream_Live
         {
             try
             {
-                // Ensure WebView2 is initialized once during startup
                 await VideoPlayer.EnsureCoreWebView2Async();
+                if (VideoPlayer.CoreWebView2 != null)
+                {
+                    VideoPlayer.CoreWebView2.PermissionRequested += CoreWebView2_PermissionRequested;
+                    VideoPlayer.CoreWebView2.ContainsFullScreenElementChanged += CoreWebView2_ContainsFullScreenElementChanged;
+
+                }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error initializing WebView2: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+        private void CoreWebView2_ContainsFullScreenElementChanged(object sender, object e)
+        {
+            if (VideoPlayer.CoreWebView2.ContainsFullScreenElement)
+            {
+                WindowStyle = WindowStyle.None;
+                WindowState = WindowState.Maximized;
+
+                VideoPlayer.HorizontalAlignment = HorizontalAlignment.Stretch;
+                VideoPlayer.VerticalAlignment = VerticalAlignment.Stretch;
+
+                Grid.SetRow(VideoPlayer, 0);
+                Grid.SetRowSpan(VideoPlayer, 2);
+                Grid.SetColumn(VideoPlayer, 0);
+                Grid.SetColumnSpan(VideoPlayer, 2);
+
+                VideoPlayer.Width = this.ActualWidth; // Match the full window width
+                VideoPlayer.Height = this.ActualHeight; // Match the full window height
+            }
+            else
+            {
+                WindowStyle = WindowStyle.SingleBorderWindow;
+                WindowState = WindowState.Normal;
+
+                VideoPlayer.HorizontalAlignment = HorizontalAlignment.Stretch;
+                VideoPlayer.VerticalAlignment = VerticalAlignment.Stretch;
+
+                Grid.SetRow(VideoPlayer, 0);
+                Grid.SetRowSpan(VideoPlayer, 1);
+                Grid.SetColumn(VideoPlayer, 0);
+                Grid.SetColumnSpan(VideoPlayer, 1);
+
+                VideoPlayer.Width = double.NaN; // Restore default width
+                VideoPlayer.Height = double.NaN; // Restore default height
+            }
+        }
+        private void CoreWebView2_PermissionRequested(object sender, CoreWebView2PermissionRequestedEventArgs e)
+        {
+            e.State = CoreWebView2PermissionState.Allow;
+        }
+        private void CoreWebView2_ContainsFullScreenElementChanged(object sender, EventArgs e)
+        {
+            if (VideoPlayer.CoreWebView2.ContainsFullScreenElement)
+            {
+                // Enter fullscreen mode
+                WindowStyle = WindowStyle.None;
+                WindowState = WindowState.Maximized;
+            }
+            else
+            {
+                // Exit fullscreen mode
+                WindowStyle = WindowStyle.SingleBorderWindow;
+                WindowState = WindowState.Normal;
+            }
+        }
+
         private async void StartGridReloadTimer()
         {
             _timerCancellationTokenSource = new CancellationTokenSource();
