@@ -99,7 +99,7 @@ namespace HoloStream_Live
         {
             try
             {
-                ScheduleService service = new ScheduleService("00e54f6c-5dfa-4836-ad18-2338f45b7913");
+                ScheduleService service = new ScheduleService("");
 
 
                 List<StreamItem> ps = await service.GetScheduleAsync(organization: "hololive");
