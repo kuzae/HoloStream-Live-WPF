@@ -5,4 +5,5 @@
 ![image](https://github.com/user-attachments/assets/c67f2424-7da3-4f06-9cfe-098848276d10)
 
 UI to pull Hololive Schedules and watch them
+
 Routinely updates the schedule
