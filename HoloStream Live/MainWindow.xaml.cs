@@ -1,36 +1,32 @@
-﻿using HoloStream_Live.Services;
+﻿using Holodex.NET.DataTypes;
+using Holodex.NET.Enums;
+using HoloStream_Live.Services;
 using Microsoft.Web.WebView2.Core;
 using System.ComponentModel;
 using System.IO;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
 using System.Windows.Shapes;
-using System.Windows.Threading;
+using System.Diagnostics;
+using System;
+using Holodex.NET;
 
 namespace HoloStream_Live
 {
     public partial class MainWindow : Window
     {
-        private const int MaxColumns = 5;
         private const int ThumbnailWidth = 50;
         private const int ThumbnailHeight = 50;
-        private const int frameMaxWidth = 300;
-        private const int frameMaxHeight = 300;
-        private const int scheduleListHeight = 60;
         private const int minColumns = 2;
         private List<StreamItem> _cachedStreams = new();
         private readonly string _logFilePath;
         private CancellationTokenSource _timerCancellationTokenSource;
         private bool _isLayout1Active;
         private bool _isUpdating;
+        private bool _isAlternate;
 
         public MainWindow()
         {
@@ -45,25 +41,82 @@ namespace HoloStream_Live
             Title = string.Empty;
             InitializeStreamsAsync();
             InitializeWebView2();
+            StartGridReloadTimer();
         }
-
         private async Task InitializeStreamsAsync()
         {
-            await FetchStreamsAsync();
-            LoadGrid(Layout1Mode: true); // Initial grid load for Layout1
-            LoadSchedule(ScheduleContainer); // Load schedule for Layout1
+            bool isLoading = true;
+
+            _ = Task.Run(async () =>
+            {
+                while (isLoading)
+                {
+                    for (int i = 0; i <= 100; i += 10)
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            LoadingBar.Value = i;
+                            LoadingStatusText.Text = $"Loading... {i}%";
+                        });
+                        await Task.Delay(100);
+                    }
+                }
+            });
+
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    CenteredLoadingUI.Visibility = Visibility.Visible;
+                    LoadingBar.Value = 0;
+                    LoadingStatusText.Text = "Starting...";
+                });
+
+                await FetchStreamsAsync();
+
+                isLoading = false;
+
+                Dispatcher.Invoke(() =>
+                {
+                    CenteredLoadingUI.Visibility = Visibility.Collapsed;
+                });
+
+                LoadGrid(Layout1Mode: true);
+                LoadSchedule(Layout1Mode: true);
+            }
+            catch (Exception ex)
+            {
+                isLoading = false;
+                Dispatcher.Invoke(() =>
+                {
+                    LoadingStatusText.Text = $"Error: {ex.Message}";
+                    LoadingBar.Value = 0;
+                });
+            }
         }
+
         private async Task FetchStreamsAsync()
         {
             try
             {
+                ScheduleService service = new ScheduleService("00e54f6c-5dfa-4836-ad18-2338f45b7913");
+
+
+                List<StreamItem> ps = await service.GetScheduleAsync(organization: "hololive");
+
+                foreach (var item in ps)
+                {
+                    Debug.WriteLine($"Name: {item.Name}");
+                    Debug.WriteLine($"Link: {item.Link}");
+                    Debug.WriteLine($"Start Time: {item.Start}");
+                    Debug.WriteLine($"Live Status: {item.LiveStatus}");
+                }
+
+
                 var scraper = new ScheduleScraper();
                 var url = "https://hololive.hololivepro.com/en/schedule/";
-                _cachedStreams = await scraper.ScrapeStreamsAsync(url);
-
+                _cachedStreams = await service.GetScheduleAsync(scheduleUrl: url);
                 LogToFile($"Fetched {_cachedStreams.Count} streams.");
-
-                // Filter the streams: remove streams that have passed and are not live
                 var now = DateTime.UtcNow;
                 var filteredStreams = _cachedStreams.Where(stream =>
                 {
@@ -125,8 +178,8 @@ namespace HoloStream_Live
                 Grid.SetColumn(VideoPlayer, 0);
                 Grid.SetColumnSpan(VideoPlayer, 2);
 
-                VideoPlayer.Width = this.ActualWidth; // Match the full window width
-                VideoPlayer.Height = this.ActualHeight; // Match the full window height
+                VideoPlayer.Width = this.ActualWidth;
+                VideoPlayer.Height = this.ActualHeight;
             }
             else
             {
@@ -141,8 +194,8 @@ namespace HoloStream_Live
                 Grid.SetColumn(VideoPlayer, 0);
                 Grid.SetColumnSpan(VideoPlayer, 1);
 
-                VideoPlayer.Width = double.NaN; // Restore default width
-                VideoPlayer.Height = double.NaN; // Restore default height
+                VideoPlayer.Width = double.NaN;
+                VideoPlayer.Height = double.NaN;
             }
         }
         private void CoreWebView2_PermissionRequested(object sender, CoreWebView2PermissionRequestedEventArgs e)
@@ -164,8 +217,6 @@ namespace HoloStream_Live
                 WindowState = WindowState.Normal;
             }
         }
-
-
         private async void StartGridReloadTimer()
         {
             _timerCancellationTokenSource = new CancellationTokenSource();
@@ -176,7 +227,7 @@ namespace HoloStream_Live
                 {
                     await Task.Delay(TimeSpan.FromMinutes(30), _timerCancellationTokenSource.Token);
 
-                    if (_isUpdating) continue; // Prevent re-entrant calls
+                    if (_isUpdating) continue;
                     _isUpdating = true;
 
                     try
@@ -188,12 +239,12 @@ namespace HoloStream_Live
                             if (_isLayout1Active)
                             {
                                 LoadGrid(Layout1Mode: true);
-                                LoadSchedule(ScheduleContainer);
+                                LoadSchedule(Layout1Mode: true);
                             }
                             else
                             {
                                 LoadGrid(Layout1Mode: false);
-                                LoadSchedule(ScheduleContainerLayout2);
+                                LoadSchedule(Layout1Mode: false);
                             }
                         });
                     }
@@ -208,8 +259,6 @@ namespace HoloStream_Live
                 // Graceful exit on cancellation
             }
         }
-
-
 
         private void LoadGrid(bool Layout1Mode)
         {
@@ -228,7 +277,7 @@ namespace HoloStream_Live
 
             for (int i = 0; i < rows; i++)
             {
-                dynamicGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                dynamicGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
             }
             for (int i = 0; i < columns; i++)
             {
@@ -246,102 +295,64 @@ namespace HoloStream_Live
             container.Content = dynamicGrid;
         }
 
-        private void LoadSchedule(ScrollViewer container)
+        private void LoadSchedule(bool Layout1Mode)
         {
+            var container = Layout1Mode ? ScheduleContainer : ScheduleContainerLayout2;
+
             if (_cachedStreams == null || _cachedStreams.Count == 0)
             {
                 MessageBox.Show("No schedule available.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            container.Content = null;
+            var stackPanel = container.Content as StackPanel;
 
-            var stackPanel = new StackPanel
+            if (stackPanel == null)
             {
-                Orientation = Orientation.Vertical,
-                VerticalAlignment = VerticalAlignment.Top
-            };
-
-            var isAlternate = false;
-
-            foreach (var stream in _cachedStreams)
-            {
-                var innerStack = new StackPanel
+                stackPanel = new StackPanel
                 {
                     Orientation = Orientation.Vertical,
-                    Margin = new Thickness(4,4,4,4)
+                    VerticalAlignment = VerticalAlignment.Top
                 };
+                container.Content = stackPanel;
+            }
 
-                var tokyoTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Tokyo Standard Time");
-                var localTimeZone = TimeZoneInfo.Local;
+            var existingItems = stackPanel.Children.Cast<UIElement>().ToList();
 
-                var firstLine = new TextBlock
+            for (int i = 0; i < _cachedStreams.Count; i++)
+            {
+                var stream = _cachedStreams[i];
+                var existingItem = existingItems
+                    .FirstOrDefault(item => ((Border)item).Tag is StreamItem existingStream && existingStream.Name == stream.Name);
+
+                if (existingItem == null)
                 {
-                    FontSize = 16,
-                    FontWeight = FontWeights.Bold,
-                    Foreground = stream.LiveStatus == "Live" ? Brushes.Red : Brushes.Black,
-                    TextTrimming = TextTrimming.CharacterEllipsis
-                };
-
-                // Handle live or scheduled streams
-                if (DateTime.TryParseExact(stream.Start, "MM.dd HH:mm", null, System.Globalization.DateTimeStyles.None, out var parsedStartTime))
-                {
-                    var tokyoDateTime = TimeZoneInfo.ConvertTimeToUtc(parsedStartTime, tokyoTimeZone);
-                    var localDateTime = TimeZoneInfo.ConvertTimeFromUtc(tokyoDateTime, localTimeZone);
-
-                    if (stream.LiveStatus == "Live")
-                    {
-                        var timer = new DispatcherTimer
-                        {
-                            Interval = TimeSpan.FromSeconds(1)
-                        };
-
-                        timer.Tick += (s, e) =>
-                        {
-                            var duration = DateTime.UtcNow - tokyoDateTime;
-                            firstLine.Text = $"(LIVE) {duration.Hours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2} - {stream.Name}";
-                        };
-
-                        timer.Start();
-                        container.Unloaded += (s, e) => timer.Stop();
-                    }
-                    else
-                    {
-                        firstLine.Text = $"{localDateTime:MM/dd h:mm tt} - {stream.Name}";
-                    }
+                    var newScheduleItem = CreateScheduleItem(stream);
+                    newScheduleItem.Tag = stream;
+                    stackPanel.Children.Add(newScheduleItem);
                 }
                 else
                 {
-                    firstLine.Text = "Invalid Time - " + stream.Name;
+                    var scheduleBorder = existingItem as Border;
+                    if (scheduleBorder != null && !stream.Equals((StreamItem)scheduleBorder.Tag))
+                    {
+                        stackPanel.Children.Remove(existingItem);
+                        var updatedScheduleItem = CreateScheduleItem(stream);
+                        updatedScheduleItem.Tag = stream;
+                        stackPanel.Children.Insert(i, updatedScheduleItem);
+                    }
                 }
-
-                var secondLine = new TextBlock
-                {
-                    Text = stream.Text,
-                    FontSize = 14,
-                    Foreground = Brushes.Black,
-                    TextWrapping = TextWrapping.Wrap
-                };
-
-                innerStack.Children.Add(firstLine);
-                innerStack.Children.Add(secondLine);
-
-                var background = isAlternate ? Brushes.LightGray : Brushes.WhiteSmoke;
-                isAlternate = !isAlternate;
-
-                var border = new Border
-                {
-                    Background = background,
-                    Child = innerStack,
-                    Height = 100,
-                    Padding = new Thickness(0),
-                    Margin = new Thickness(0)
-                };
-                stackPanel.Children.Add(border);
             }
 
-            container.Content = stackPanel;
+            foreach (var existingItem in existingItems)
+            {
+                if (!(_cachedStreams.Any(stream => stream.Name == ((StreamItem)((Border)existingItem).Tag)?.Name)))
+                {
+                    stackPanel.Children.Remove(existingItem);
+                }
+            }
         }
+
         private void OnReturnButtonClicked(object sender, EventArgs e)
         {
             CloseVideoPlayer();
@@ -365,7 +376,7 @@ namespace HoloStream_Live
             {
                 VideoPlayer.EnsureCoreWebView2Async();
             }
-            LoadSchedule(ScheduleContainerLayout2);
+            LoadSchedule(false);
             LoadGrid(false);
         }
 
@@ -377,7 +388,7 @@ namespace HoloStream_Live
             ClearUI();
             Layout1.Visibility = Visibility.Visible;
             Layout2.Visibility = Visibility.Hidden;
-            LoadSchedule(ScheduleContainer);
+            LoadSchedule(true);
             LoadGrid(true);
         }
 
@@ -572,6 +583,56 @@ namespace HoloStream_Live
             };
 
             return cardBorder;
+        }
+        private Border CreateScheduleItem(StreamItem stream)
+        {
+            var innerStack = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                MinHeight = 100,
+                Background = _isAlternate ? Brushes.DarkGray : Brushes.Gray
+            };
+
+            var firstLine = new TextBlock
+            {
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Foreground = stream.LiveStatus == "Live" ? Brushes.Red : Brushes.Black,
+                Text = stream.Name
+            };
+
+            var tokyoTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Tokyo Standard Time");
+            var localTimeZone = TimeZoneInfo.Local;
+
+            if (DateTime.TryParseExact(stream.Start, "MM.dd HH:mm", null, System.Globalization.DateTimeStyles.None, out var parsedStartTime))
+            {
+                var tokyoDateTime = TimeZoneInfo.ConvertTimeToUtc(parsedStartTime, tokyoTimeZone);
+                var localDateTime = TimeZoneInfo.ConvertTimeFromUtc(tokyoDateTime, localTimeZone);
+                firstLine.Text = $"{localDateTime:MM/dd h:mm tt} - {stream.Name}";
+            }
+            else
+            {
+                firstLine.Text = "Invalid Time";
+            }
+
+
+            var secondLine = new TextBlock
+            {
+                Text = stream.Text,
+                FontSize = 14,
+                Foreground = Brushes.Black,
+                TextWrapping = TextWrapping.Wrap
+            };
+
+            innerStack.Children.Add(firstLine);
+            innerStack.Children.Add(secondLine);
+
+            _isAlternate = !_isAlternate;
+
+            return new Border
+            {
+                Child = innerStack
+            };
         }
 
         private void ClearUI()

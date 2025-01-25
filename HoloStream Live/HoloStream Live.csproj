@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Holodex.NET" Version="1.0.2" />
     <PackageReference Include="HtmlAgilityPack" Version="1.11.72" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2957.106" />
     <PackageReference Include="PuppeteerSharp" Version="20.0.5" />

@@ -9,6 +9,23 @@
         Title="HoloStream Live" Height="900" Width="1600">
 
     <Grid x:Name="MainContainerGrid">
+        <!-- Centered Loading UI -->
+        <Grid x:Name="CenteredLoadingUI" Visibility="Collapsed"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              Panel.ZIndex="100">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ProgressBar x:Name="LoadingBar"
+                             Minimum="0" Maximum="100"
+                             Height="20" Width="300"
+                             Margin="10" />
+                <TextBlock x:Name="LoadingStatusText"
+                           FontSize="16" FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           Margin="10"
+                           TextAlignment="Center" />
+            </StackPanel>
+        </Grid>
         <!-- Layout 1: Grid of Video Images and Schedule -->
         <Grid x:Name="Layout1" Visibility="Visible">
             <Grid.RowDefinitions>
@@ -37,7 +54,11 @@
                                       HorizontalAlignment="Stretch" />
                     </Grid>
                 </TabItem>
-                <TabItem Header="TBD">
+                <TabItem Header="Phase Connect">
+                    <StackPanel Orientation="Horizontal">
+                    </StackPanel>
+                </TabItem>
+                <TabItem Header="NijiSanji">
                     <StackPanel Orientation="Horizontal">
                     </StackPanel>
                 </TabItem>
@@ -64,7 +85,7 @@
                     FontSize="12"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Top"
-                    Width="75"
+                    Width="50"
                     Height="23"
                     Grid.Row="0"
                     Grid.Column="1"
@@ -91,7 +112,11 @@
                                       HorizontalAlignment="Stretch" />
                     </Grid>
                 </TabItem>
-                <TabItem Header="TBD">
+                <TabItem Header="Phase Connect">
+                    <StackPanel Orientation="Horizontal">
+                    </StackPanel>
+                </TabItem>
+                <TabItem Header="NijiSanji">
                     <StackPanel Orientation="Horizontal">
                     </StackPanel>
                 </TabItem>
