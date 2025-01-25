@@ -30,6 +30,7 @@ namespace HoloStream_Live
         private readonly string _logFilePath;
         private CancellationTokenSource _timerCancellationTokenSource;
         private bool _isLayout1Active;
+        private bool _isUpdating;
 
         public MainWindow()
         {
@@ -164,6 +165,7 @@ namespace HoloStream_Live
             }
         }
 
+
         private async void StartGridReloadTimer()
         {
             _timerCancellationTokenSource = new CancellationTokenSource();
@@ -173,30 +175,40 @@ namespace HoloStream_Live
                 while (!_timerCancellationTokenSource.Token.IsCancellationRequested)
                 {
                     await Task.Delay(TimeSpan.FromMinutes(30), _timerCancellationTokenSource.Token);
-                    await FetchStreamsAsync();
 
-                    Application.Current.Dispatcher.Invoke(() =>
+                    if (_isUpdating) continue; // Prevent re-entrant calls
+                    _isUpdating = true;
+
+                    try
                     {
-                        if (_isLayout1Active)
+                        await FetchStreamsAsync();
+
+                        Application.Current.Dispatcher.Invoke(() =>
                         {
-                            // Update Layout1
-                            LoadGrid(Layout1Mode: true);
-                            LoadSchedule(ScheduleContainer);
-                        }
-                        else
-                        {
-                            // Update Layout2
-                            LoadGrid(Layout1Mode: false);
-                            LoadSchedule(ScheduleContainerLayout2);
-                        }
-                    });
+                            if (_isLayout1Active)
+                            {
+                                LoadGrid(Layout1Mode: true);
+                                LoadSchedule(ScheduleContainer);
+                            }
+                            else
+                            {
+                                LoadGrid(Layout1Mode: false);
+                                LoadSchedule(ScheduleContainerLayout2);
+                            }
+                        });
+                    }
+                    finally
+                    {
+                        _isUpdating = false;
+                    }
                 }
             }
             catch (TaskCanceledException)
             {
-                // Handle timer cancellation gracefully
+                // Graceful exit on cancellation
             }
         }
+
 
 
         private void LoadGrid(bool Layout1Mode)
@@ -209,17 +221,11 @@ namespace HoloStream_Live
                 return;
             }
 
-            // Clear existing content
             container.Content = null;
-
-            // Create and populate dynamic grid
             var dynamicGrid = new Grid();
-
-            // Dynamically calculate the number of columns based on the max width per card
-            int columns = Math.Max(minColumns, (int)(this.Width / 400)); // Use 400px as the max width per card
+            int columns = Math.Max(minColumns, (int)(this.Width / 400)); 
             int rows = (_cachedStreams.Count + columns - 1) / columns;
 
-            // Add Row and Column definitions dynamically
             for (int i = 0; i < rows; i++)
             {
                 dynamicGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -229,18 +235,14 @@ namespace HoloStream_Live
                 dynamicGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             }
 
-            // Populate grid with stream cards
             for (int i = 0; i < _cachedStreams.Count; i++)
             {
                 var stream = _cachedStreams[i];
                 var gridItem = CreateStreamCard(stream);
-
                 Grid.SetRow(gridItem, i / columns);
                 Grid.SetColumn(gridItem, i % columns);
-
                 dynamicGrid.Children.Add(gridItem);
             }
-
             container.Content = dynamicGrid;
         }
 
@@ -289,10 +291,9 @@ namespace HoloStream_Live
 
                     if (stream.LiveStatus == "Live")
                     {
-                        // Set up a DispatcherTimer to update the live duration
                         var timer = new DispatcherTimer
                         {
-                            Interval = TimeSpan.FromSeconds(1) // Update every second
+                            Interval = TimeSpan.FromSeconds(1)
                         };
 
                         timer.Tick += (s, e) =>
@@ -301,10 +302,7 @@ namespace HoloStream_Live
                             firstLine.Text = $"(LIVE) {duration.Hours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2} - {stream.Name}";
                         };
 
-                        // Start the timer
                         timer.Start();
-
-                        // Stop the timer when the stream is no longer live (clean up)
                         container.Unloaded += (s, e) => timer.Stop();
                     }
                     else
@@ -317,14 +315,12 @@ namespace HoloStream_Live
                     firstLine.Text = "Invalid Time - " + stream.Name;
                 }
 
-                // Add the first line and second line (title)
                 var secondLine = new TextBlock
                 {
                     Text = stream.Text,
                     FontSize = 14,
                     Foreground = Brushes.Black,
-                    TextWrapping = TextWrapping.Wrap,
-                    TextTrimming = TextTrimming.CharacterEllipsis
+                    TextWrapping = TextWrapping.Wrap
                 };
 
                 innerStack.Children.Add(firstLine);
@@ -337,11 +333,10 @@ namespace HoloStream_Live
                 {
                     Background = background,
                     Child = innerStack,
-                    Height = 100, // Example height, you can adjust as needed
+                    Height = 100,
                     Padding = new Thickness(0),
                     Margin = new Thickness(0)
                 };
-
                 stackPanel.Children.Add(border);
             }
 
@@ -349,8 +344,8 @@ namespace HoloStream_Live
         }
         private void OnReturnButtonClicked(object sender, EventArgs e)
         {
-            CloseVideoPlayer(); // Ensures the video player is cleaned up
-            _isLayout1Active = true; // Switch to Layout1
+            CloseVideoPlayer();
+            _isLayout1Active = true;
             Layout1.Visibility = Visibility.Visible;
             Layout2.Visibility = Visibility.Hidden;
         }
@@ -359,7 +354,7 @@ namespace HoloStream_Live
             CloseVideoPlayer();
             ClearUI();
 
-            _isLayout1Active = false; // Switch to Layout2
+            _isLayout1Active = false;
             Layout1.Visibility = Visibility.Hidden;
             Layout2.Visibility = Visibility.Visible;
 
@@ -469,11 +464,8 @@ namespace HoloStream_Live
 
                 var storyboard = new Storyboard();
                 storyboard.Children.Add(spinAnimation);
-
                 Storyboard.SetTarget(spinAnimation, profileEllipse);
                 Storyboard.SetTargetProperty(spinAnimation, new PropertyPath("RenderTransform.Angle"));
-
-                // Start the animation
                 storyboard.Begin();
             }
 
@@ -508,7 +500,6 @@ namespace HoloStream_Live
                 timeLabel.Text = "Invalid Time";
             }
 
-            // Place the titleLabel at the bottom
             var titleLabel = new TextBlock
             {
                 Text = stream.Text,
@@ -519,14 +510,14 @@ namespace HoloStream_Live
                 VerticalAlignment = VerticalAlignment.Bottom,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 10, 0, 10),
-                TextTrimming = TextTrimming.CharacterEllipsis, // Trims text with "..." if it overflows
-                TextWrapping = TextWrapping.Wrap, // Enables wrapping for multi-line text
-                Height = 50 // Constrain the height to allow for two lines
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                TextWrapping = TextWrapping.Wrap,
+                Height = 50
             };
 
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Bottom content (title)
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             var profileInfoStack = new StackPanel
             {
@@ -537,13 +528,10 @@ namespace HoloStream_Live
 
             profileInfoStack.Children.Add(nameLabel);
             profileInfoStack.Children.Add(timeLabel);
-
             grid.Children.Add(profileInfoStack);
             grid.Children.Add(liveLabel);
-
             Grid.SetRow(profileEllipse, 1);
             grid.Children.Add(profileEllipse);
-
             Grid.SetRow(titleLabel, 2);
             grid.Children.Add(titleLabel);
 
@@ -592,6 +580,13 @@ namespace HoloStream_Live
             GridContainer.Content = null;
             GridContainerLayout2.Content = null;
             ScheduleContainerLayout2.Content = null;
+        }
+
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            _timerCancellationTokenSource?.Cancel();
+            _timerCancellationTokenSource?.Dispose();
+            base.OnClosing(e);
         }
     }
 }
